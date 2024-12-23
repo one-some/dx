@@ -1,5 +1,3 @@
-exp = input("d/dx: ")
-#exp = "6x^3-9x+4"
 # exp = "(1 * (2 * (3 * 4)))"
 # exp = "1x^2-2x+1"
 # exp = "2x^4 - 10x^2+13x"
@@ -7,11 +5,18 @@ exp = input("d/dx: ")
 # exp = "sqrt(x)"
 # exp = "y^-4 - 9y^-3 +8y-2 + 12"
 
-# exp = "(x + 1) * x"
+exp = "(x + 1) * x"
+# exp = "6x^3-9x+4"
+exp = "3x^2+6x-4"
 
-# Calc input
-exp = exp.lower()
-exp = exp.replace("**", "^")
+try:
+    import os
+    calc_mode = False
+except ImportError:
+    print("Calculator Mode")
+    calc_mode = True
+    exp = None
+
 
 class Operator:
     def __init__(self, precedence: int, left_associativity: bool):
@@ -27,8 +32,6 @@ pemdas = {
 }
 functions = ["sqrt"]
 
-tokens = [""]
-
 def isdecimal(string):
     try:
         float(string)
@@ -36,111 +39,123 @@ def isdecimal(string):
     except ValueError:
         return False
 
-for char in exp.replace(" ", ""):
-    if char in ["(", ")", ","] or char in pemdas:
-        tokens.append(char)
-        tokens.append("")
-        continue
+def tokenize(exp):
+    tokens = [""]
 
-    if isdecimal(tokens[-1]) and not (char.isdigit() or char == "."):
-        tokens.append("")
+    for char in exp.replace(" ", ""):
+        if char in ["(", ")", ","] or char in pemdas:
+            tokens.append(char)
+            tokens.append("")
+            continue
 
-    tokens[-1] += char
+        if isdecimal(tokens[-1]) and not (char.isdigit() or char == "."):
+            tokens.append("")
 
-# Cull empty tokens
-tokens = [x for x in tokens if x]
+        tokens[-1] += char
 
-# Process negatives
-for i in range(len(tokens)):
-    if i + 2 >= len(tokens): continue
-    if tokens[i] not in pemdas: continue
-    if tokens[i + 1] != "-": continue
-    if not isdecimal(tokens[i + 2]): continue
+    # Cull empty tokens
+    tokens = [x for x in tokens if x]
 
-    tokens[i + 2] = "-" + tokens[i + 2]
-    del tokens[i + 1]
+    # Process negatives
+    for i in range(len(tokens)):
+        if i + 2 >= len(tokens): continue
+        if tokens[i] not in pemdas: continue
+        if tokens[i + 1] != "-": continue
+        if not isdecimal(tokens[i + 2]): continue
 
-# Add implicit multiplication like coeffecients or whatever
-tok = []
-for t in tokens:
-    if (
-        t in pemdas
-        or t in functions
-        or t in "()"
-        or not tok
-        or tok[-1] in pemdas
-        or tok[-1] in functions
-        or tok[-1] in "()"
-    ):
-        tok.append(t)
-        continue
+        tokens[i + 2] = "-" + tokens[i + 2]
+        del tokens[i + 1]
 
-    tok.append("*")
-    tok.append(t)
-
-tokens = tok
-
-print(exp)
-print(tokens)
-
-output = []
-stack = []
-
-for token in tokens:
-    if token in functions:
-        stack.insert(0, token)
-    elif token == "(":
-        stack.insert(0, token)
-    elif token == ")":
-        while stack and stack[0] != "(":
-            output.append(stack.pop(0))
-
-        x = stack.pop(0)
-    elif token == ",":
-        while stack[0] != "(":
-            output.append(stack.pop(0))
-    elif token in pemdas:
-        while (
-            stack
-            and stack[0] != "("
-            and (
-                stack[0] in functions
-                or pemdas[stack[0]].precedence > pemdas[token].precedence
-                or (
-                    pemdas[stack[0]].precedence == pemdas[token].precedence
-                    and pemdas[token].left_associativity
-                )
-            )
+    # Add implicit multiplication like coeffecients or whatever
+    tok = []
+    for t in tokens:
+        if (
+            t in pemdas
+            or t in functions
+            or t in "()"
+            or not tok
+            or tok[-1] in pemdas
+            or tok[-1] in functions
+            or tok[-1] in "()"
         ):
-            output.append(stack.pop(0))
-        stack.insert(0, token)
-    else:
-        output.append(token)
+            tok.append(t)
+            continue
 
-while stack:
-    assert stack[0] != "("
-    output.append(stack.pop(0))
+        tok.append("*")
+        tok.append(t)
+    print(tok)
+    return tok
 
-print("===")
-print(output)
 
-output = [float(x) if isdecimal(x.lstrip("-")) else x for x in output]
+def dijkstra(tokens):
+    output = []
+    stack = []
+
+    # TODO: We could modify this to not use RPN as an intermediary step and instead assemmble the AST here
+
+    for token in tokens:
+        if token in functions:
+            stack.insert(0, token)
+        elif token == "(":
+            stack.insert(0, token)
+        elif token == ")":
+            while stack and stack[0] != "(":
+                output.append(stack.pop(0))
+
+            stack.pop(0)
+        elif token == ",":
+            while stack[0] != "(":
+                output.append(stack.pop(0))
+        elif token in pemdas:
+            while (
+                stack
+                and stack[0] != "("
+                and (
+                    stack[0] in functions
+                    or pemdas[stack[0]].precedence > pemdas[token].precedence
+                    or (
+                        pemdas[stack[0]].precedence == pemdas[token].precedence
+                        and pemdas[token].left_associativity
+                    )
+                )
+            ):
+                output.append(stack.pop(0))
+            stack.insert(0, token)
+        else:
+            output.append(token)
+
+    while stack:
+        assert stack[0] != "("
+        output.append(stack.pop(0))
+
+    print("===")
+    print(output)
+
+    output = [float(x) if isdecimal(x.lstrip("-")) else x for x in output]
+
+    return output
 
 # Eval
 
-stack = []
-
 class TreeNode:
+    def __init__(self):
+        self.dx_earmarker = None
+
+    def dx_earmark(self, respect_to):
+        self.dx_earmarker = respect_to
+        return self
+
     def optimized(self):
         return self
 
 class SimpleValue(TreeNode):
     def __init__(self, value):
+        super().__init__()
         self.value = value
 
     def __eq__(self, val):
         # Will I regret this later....?
-        return self.value == val or super().__eq__(val)
+        return self.value == val or self is val
 
     def __repr__(self):
         return str(self.value)
@@ -155,6 +170,8 @@ class Operation(TreeNode):
     operator = "?"
 
     def __init__(self, lhs, rhs):
+        super().__init__()
+
         lhs = value_token(lhs)
         rhs = value_token(rhs)
         assert isinstance(lhs, TreeNode)
@@ -173,9 +190,6 @@ class Operation(TreeNode):
         return self.i_eval(lhs, rhs)
     
     def __str__(self):
-        # UGLY
-        # lhs = str(self.lhs.to_str() if isinstance(self.lhs, Operation) else self.lhs
-        # rhs = self.rhs.to_str() if isinstance(self.rhs, Operation) else self.rhs
         return "(%s)" % " ".join([str(x) for x in [self.lhs, self.operator, self.rhs]])
 
     def optimized(self):
@@ -229,6 +243,14 @@ class MultOperation(Operation):
     @staticmethod
     def i_eval(lhs, rhs):
         return lhs * rhs
+
+    def __str__(self):
+        maybe_immediate, maybe_symbolic =  sorted([self.lhs, self.rhs], key=lambda x: isinstance(x, ImmediateValue), reverse=True)
+
+        if not isinstance(maybe_immediate, ImmediateValue): return super().__str__()
+        if not isinstance(maybe_symbolic, SymbolicValue): return super().__str__()
+
+        return str(maybe_immediate) + str(maybe_symbolic)
 
     def _optimized(self):
         # X * 0 == 0
@@ -286,49 +308,46 @@ def value_token(token):
 
     return SymbolicValue(token)
 
+def build_tree(rpn):
+    stack = []
 
-for token in output:
-    if token in functions:
-        # UNARY OPERATORS
-        if token == "sqrt":
-            # I AM LAZY
-            term = value_token(stack.pop())
-            out = ExpOperation(term, 1/2)
+    for token in rpn:
+        if token in functions:
+            # UNARY OPERATORS
+            if token == "sqrt":
+                # I AM LAZY
+                term = value_token(stack.pop())
+                out = ExpOperation(term, 1/2)
+            else:
+                assert False
+        elif token in pemdas or token in functions:
+            # BINARY OPERATORS
+            rhs, lhs = value_token(stack.pop()), value_token(stack.pop())
+            out = {
+                "+": AddOperation,
+                "-": SubOperation,
+                "*": MultOperation,
+                "/": DivOperation,
+                "^": ExpOperation,
+            }[token](lhs, rhs)
         else:
-            assert False
-    elif token in pemdas or token in functions:
-        # BINARY OPERATORS
-        print(stack)
-        rhs, lhs = value_token(stack.pop()), value_token(stack.pop())
-        out = {
-            "+": AddOperation,
-            "-": SubOperation,
-            "*": MultOperation,
-            "/": DivOperation,
-            "^": ExpOperation,
-        }[token](lhs, rhs)
-    else:
-        out = value_token(token)
+            out = value_token(token)
 
-    stack.append(out)
+        stack.append(out)
 
+    assert len(stack) == 1
+    root, = stack
 
-assert len(stack) == 1
-root, = stack
-
-print(root)
-print("=== d/dx ===")
-
-earmarked_derived_nodes = {}
+    print(root)
+    return root
 
 def dx(node, respect_to="x") -> TreeNode:
     # Without earmarking we can derive the result of node derivations in calculations
     # which is incorrect and bad and evil
-    earmarked_derived_nodes[respect_to] = earmarked_derived_nodes.get("respect_to", [])
-    if node in earmarked_derived_nodes[respect_to]:
+    if node.dx_earmarker == respect_to:
         return node
-    node = _dx(node, respect_to)
-    earmarked_derived_nodes[respect_to].append(node)
+    node = _dx(node, respect_to).dx_earmark(respect_to)
+    # TODO: Earmarked with respect to what??
     return node
 
 def _dx(node, respect_to="x") -> TreeNode:
@@ -351,6 +370,7 @@ def _dx(node, respect_to="x") -> TreeNode:
         node.rhs = dx(node.rhs, respect_to=respect_to)
     elif isinstance(node, SubOperation):
         node.lhs = dx(node.lhs, respect_to=respect_to)
+        # print("lhs", type(node.lhs), node.lhs, "rhs", type(node.rhs), node.rhs)
         node.rhs = dx(node.rhs, respect_to=respect_to)
     elif isinstance(node, MultOperation):
         # d/dx(f * g)    -->    (g * f') + (f * g')
@@ -378,7 +398,25 @@ def _dx(node, respect_to="x") -> TreeNode:
 
     return node
 
-print("\ty =", str(root))
-dxr = dx(root)
-print("\td/dx =", str(dxr))
-print("[opt]\td/dx =", str(dxr.optimized()))
+def derive_string(string):
+    # Calc input
+    string = string.lower()
+    string = string.replace("**", "^")
+
+    tokens = tokenize(string)
+    rpn = dijkstra(tokens)
+    root_node =  build_tree(rpn)
+
+    print("=== d/dx ===")
+    print("\ty =", str(root_node))
+    dxr = dx(root_node)
+    print(".....\td/dx =", str(dxr))
+    print("[opt]\td/dx =", str(dxr.optimized()))
+
+if calc_mode:
+    while True:
+        exp = input("d/dx: ")
+        if not exp: break
+        derive_string(exp)
+else:
+    derive_string(exp)
