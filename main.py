@@ -1,7 +1,12 @@
 # exp = input("d/dx: ")
 #exp = "6x^3-9x+4"
-exp = "(1 * (2 * (3 * 4)))"
+# exp = "(1 * (2 * (3 * 4)))"
 # exp = "1x^2-2x+1"
+# exp = "2x^4 - 10x^2+13x"
+# exp = "4x^7-3x^-7+9x"
+# exp = "sqrt(x)"
+# exp = "y^-4 - 9y^-3 +8y-2 + 12"
+exp = "(x + 1) * x"
 
 class Operator:
     def __init__(self, precedence: int, left_associativity: bool):
@@ -15,7 +20,7 @@ pemdas = {
     "+": Operator(1, True),
     "-": Operator(1, True),
 }
-functions = ["sin", "max"]
+functions = ["sqrt"]
 
 tokens = [""]
 
@@ -30,11 +35,22 @@ for char in exp.replace(" ", ""):
 
     tokens[-1] += char
 
-# Add mult
+# Cull empty tokens
+tokens = [x for x in tokens if x]
+
+# Process negatives
+for i in range(len(tokens)):
+    if i + 2 >= len(tokens): continue
+    if tokens[i] not in pemdas: continue
+    if tokens[i + 1] != "-": continue
+    if not tokens[i + 2].isdecimal(): continue
+
+    tokens[i + 2] = "-" + tokens[i + 2]
+    del tokens[i + 1]
+
+# Add implicit multiplication like coeffecients or whatever
 tok = []
 for t in tokens:
-    if not t: continue
-
     if (
         t in pemdas
         or t in functions
@@ -96,7 +112,7 @@ while stack:
 print("===")
 print(output)
 
-output = [float(x) if x.isdecimal() else x for x in output]
+output = [float(x) if x.lstrip("-").isdecimal() else x for x in output]
 
 # Eval
 
@@ -260,10 +276,18 @@ def value_token(token):
 
 
 for token in output:
-    if token in pemdas:
+    if token in functions:
+        # UNARY OPERATORS
+        if token == "sqrt":
+            # I AM LAZY
+            term = value_token(stack.pop())
+            out = ExpOperation(term, 1/2)
+        else:
+            assert False
+    elif token in pemdas or token in functions:
+        # BINARY OPERATORS
         print(stack)
         rhs, lhs = value_token(stack.pop()), value_token(stack.pop())
-
         out = {
             "+": AddOperation,
             "-": SubOperation,
@@ -271,9 +295,10 @@ for token in output:
             "/": DivOperation,
             "^": ExpOperation,
         }[token](lhs, rhs)
-        stack.append(out)
     else:
-        stack.append(value_token(token))
+        out = value_token(token)
+
+    stack.append(out)
 
 
 assert len(stack) == 1
@@ -282,47 +307,52 @@ root, = stack
 print(root)
 print("=== d/dx ===")
 
-earmarked_derived_nodes = []
+earmarked_derived_nodes = {}
 
-def dx(node) -> TreeNode:
+def dx(node, respect_to="x") -> TreeNode:
     # Without earmarking we can derive the result of node derivations in calculations
     # which is incorrect and bad and evil
-    if node in earmarked_derived_nodes:
+    earmarked_derived_nodes[respect_to] = earmarked_derived_nodes.get("respect_to", [])
+    if node in earmarked_derived_nodes[respect_to]:
         return node
-    node = _dx(node)
-    earmarked_derived_nodes.append(node)
+    node = _dx(node, respect_to)
+    earmarked_derived_nodes[respect_to].append(node)
     return node
 
-def _dx(node) -> TreeNode:
+def _dx(node, respect_to="x") -> TreeNode:
     if isinstance(node, ImmediateValue):
         # A derivitive of a constant is zero
         return ImmediateValue(0)
 
     if isinstance(node, SymbolicValue):
-        # TODO: Handle symbols we're not taking with respect to....
+        if node.value == respect_to:
+            # The derivitive of any variable with respect to itself is 1.
+            return ImmediateValue(1)
 
-        # The derivitive of any variable with respect to itself is 1.
-        return ImmediateValue(1)
+        # TODO: Handle symbols we're not taking with respect to....
+        assert node.value == respect_to
 
     assert isinstance(node, Operation)
 
     if isinstance(node, AddOperation):
-        node.lhs = dx(node.lhs)
-        node.rhs = dx(node.rhs)
-    # This causes issues. Why?
+        node.lhs = dx(node.lhs, respect_to=respect_to)
+        node.rhs = dx(node.rhs, respect_to=respect_to)
     elif isinstance(node, SubOperation):
-        node.lhs = dx(node.lhs)
-        node.rhs = dx(node.rhs)
+        node.lhs = dx(node.lhs, respect_to=respect_to)
+        node.rhs = dx(node.rhs, respect_to=respect_to)
     elif isinstance(node, MultOperation):
-        if node.rhs == "x": return node.lhs
-        if node.lhs == "x": return node.rhs
+        # d/dx(f * g)    -->    (g * f') + (f * g')
+        return AddOperation(
+            MultOperation(node.rhs, dx(node.lhs, respect_to=respect_to)),
+            MultOperation(node.lhs, dx(node.rhs, respect_to=respect_to)),
+        )
     elif isinstance(node, DivOperation):
         # d/dx(f / g)   -->    ( (g * f') - (f * g') ) / (g ^ 2)
         # girlfriend minus foreground over square ground
         return DivOperation(
             SubOperation(
-                MultOperation(node.rhs, dx(node.lhs)),
-                MultOperation(node.lhs, dx(node.rhs)),
+                MultOperation(node.rhs, dx(node.lhs, respect_to=respect_to)),
+                MultOperation(node.lhs, dx(node.rhs, respect_to=respect_to)),
             ),
             ExpOperation(node.rhs, 2)
         )
@@ -330,9 +360,9 @@ def _dx(node) -> TreeNode:
         return MultOperation(node.rhs, ExpOperation(node.lhs, SubOperation(node.rhs, 1)))
 
     if isinstance(node.lhs, Operation):
-        node.lhs = dx(node.lhs)
+        node.lhs = dx(node.lhs, respect_to=respect_to)
     if isinstance(node.rhs, Operation):
-        node.rhs = dx(node.rhs)
+        node.rhs = dx(node.rhs, respect_to=respect_to)
 
     return node
 
