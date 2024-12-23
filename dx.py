@@ -1,4 +1,4 @@
-# exp = input("d/dx: ")
+exp = input("d/dx: ")
 #exp = "6x^3-9x+4"
 # exp = "(1 * (2 * (3 * 4)))"
 # exp = "1x^2-2x+1"
@@ -6,7 +6,12 @@
 # exp = "4x^7-3x^-7+9x"
 # exp = "sqrt(x)"
 # exp = "y^-4 - 9y^-3 +8y-2 + 12"
-exp = "(x + 1) * x"
+
+# exp = "(x + 1) * x"
+
+# Calc input
+exp = exp.lower()
+exp = exp.replace("**", "^")
 
 class Operator:
     def __init__(self, precedence: int, left_associativity: bool):
@@ -24,13 +29,20 @@ functions = ["sqrt"]
 
 tokens = [""]
 
+def isdecimal(string):
+    try:
+        float(string)
+        return True
+    except ValueError:
+        return False
+
 for char in exp.replace(" ", ""):
     if char in ["(", ")", ","] or char in pemdas:
         tokens.append(char)
         tokens.append("")
         continue
 
-    if tokens[-1].isdecimal() and not (char.isdecimal() or char == "."):
+    if isdecimal(tokens[-1]) and not (char.isdigit() or char == "."):
         tokens.append("")
 
     tokens[-1] += char
@@ -43,7 +55,7 @@ for i in range(len(tokens)):
     if i + 2 >= len(tokens): continue
     if tokens[i] not in pemdas: continue
     if tokens[i + 1] != "-": continue
-    if not tokens[i + 2].isdecimal(): continue
+    if not isdecimal(tokens[i + 2]): continue
 
     tokens[i + 2] = "-" + tokens[i + 2]
     del tokens[i + 1]
@@ -112,7 +124,7 @@ while stack:
 print("===")
 print(output)
 
-output = [float(x) if x.lstrip("-").isdecimal() else x for x in output]
+output = [float(x) if isdecimal(x.lstrip("-")) else x for x in output]
 
 # Eval
 
@@ -152,7 +164,7 @@ class Operation(TreeNode):
         self.rhs = rhs
 
     def __repr__(self):
-        return f"({type(self).__name__}: {self.lhs}, {self.rhs})"
+        return "(%s: %s, %s)" % (type(self).__name__, self.lhs, self.rhs)
 
     def eval(self):
         # UGLY
@@ -164,7 +176,7 @@ class Operation(TreeNode):
         # UGLY
         # lhs = str(self.lhs.to_str() if isinstance(self.lhs, Operation) else self.lhs
         # rhs = self.rhs.to_str() if isinstance(self.rhs, Operation) else self.rhs
-        return f"({self.lhs} {self.operator} {self.rhs})"
+        return "(%s)" % " ".join([str(x) for x in [self.lhs, self.operator, self.rhs]])
 
     def optimized(self):
         if isinstance(self.lhs, Operation): self.lhs = self.lhs.optimized()
